@@ -20,5 +20,6 @@ all: libpitcon.a
 
 clean:
 	@-rm -f *~
+	@-rm -rf lib obj
 	@-rm -f $(OBJDIR)/*.o
 	@-rm -f $(LIBDIR)/libpitcon.a
