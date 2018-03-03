@@ -1,5 +1,5 @@
 ! Check if assumed size works
-SUBROUTINE c_pitcon(c_f,fpar,ierror,ipar,iwork,liw,nvar,rwork,lrw,xr,solver) BIND(C, NAME='c_pitcon')
+SUBROUTINE c_pitcon(c_f,fpar,ierror,ipar,iwork,liw,nvar,rwork,lrw,xr,solver,lb,ub) BIND(C, NAME='c_pitcon')
   USE, INTRINSIC :: iso_c_binding, ONLY : c_int, c_float
   INTERFACE
     SUBROUTINE c_f(nvar,fpar,ipar,x,f) BIND(C)
@@ -24,11 +24,13 @@ SUBROUTINE c_pitcon(c_f,fpar,ierror,ipar,iwork,liw,nvar,rwork,lrw,xr,solver) BIN
   REAL(c_float), INTENT(INOUT) :: rwork(lrw)
   INTEGER(c_int), INTENT(IN) :: liw
   INTEGER(c_int), INTENT(INOUT) :: iwork(liw)
+  REAL(c_float), INTENT(OUT) :: lb(nvar)
+  REAL(c_float), INTENT(OUT) :: ub(nvar)
   if (solver == 0) then
     CALL pitcon(c_f, fpar, c_f, ierror, ipar, iwork, liw, &
-        nvar, rwork, lrw, xr, dge_slv)
+        nvar, rwork, lrw, xr, lb, ub, dge_slv)
   else
     CALL pitcon(c_f, fpar, c_f, ierror, ipar, iwork, liw, &
-        nvar, rwork, lrw, xr, dgb_slv)
+        nvar, rwork, lrw, xr, lb, ub, dgb_slv)
   end if
 END SUBROUTINE c_pitcon

@@ -8,7 +8,7 @@ OBJ_DEST=$(addprefix $(OBJDIR)/,$(OBJ_FOR_LIB))
 %.o : %.f90
 	@mkdir -p obj
 	@echo "Compiling $*.f90 ..."
-	@$(F90) -c $*.f90 -o $(OBJDIR)/$*.o 
+	@$(F90) -g -c $*.f90 -o $(OBJDIR)/$*.o 
 
 libpitcon.a : $(OBJ_FOR_LIB)
 	@mkdir -p lib

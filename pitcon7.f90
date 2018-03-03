@@ -1,5 +1,5 @@
 subroutine pitcon ( df, fpar, fx, ierror, ipar, iwork, liw, nvar, rwork, &
-  lrw, xr, slname )
+  lrw, xr, lb, ub, slname )
 
 !*****************************************************************************80
 !
@@ -1105,6 +1105,8 @@ subroutine pitcon ( df, fpar, fx, ierror, ipar, iwork, liw, nvar, rwork, &
   double precision qual
   double precision rwork(lrw)
   double precision xr(nvar)
+  double precision lb(nvar)
+  double precision ub(nvar)
 !
 !
 !  1.  Set a few parameters.
@@ -1211,7 +1213,7 @@ subroutine pitcon ( df, fpar, fx, ierror, ipar, iwork, liw, nvar, rwork, &
 !  Check that the starting point satisfies the equations.
 !
     call start ( df,fpar,fx,ierror,ipar,iwork(2),iwork,liw, &
-      lrw,nvar,rwork,rwork(lwk),rwork(lxc),rwork(lxf),xr,slname)
+      lrw,nvar,rwork,rwork(lwk),rwork(lxc),rwork(lxf),xr,lb,ub,slname)
 
     if ( ierror /= 0 ) then
       if ( iwrite > 0 ) then
@@ -1245,7 +1247,7 @@ subroutine pitcon ( df, fpar, fx, ierror, ipar, iwork, liw, nvar, rwork, &
 !  and use Newton's method to get target point.
 !
   call target ( df, fpar, fx, ierror, ifound, ipar, iwork, liw, lrw, &
-    nvar, rwork, slname, rwork(lwk), rwork(lxc), rwork(lxf), xr )
+    nvar, rwork, lb, ub, slname, rwork(lwk), rwork(lxc), rwork(lxf), xr )
 
   if ( ifound == 1 ) then
     if ( ierror /= 0 ) then
@@ -1321,7 +1323,7 @@ subroutine pitcon ( df, fpar, fx, ierror, ipar, iwork, liw, nvar, rwork, &
        (sign(one,rwork(26)) /= sign(one,rwork(27))) ) then
 
       call limit(df,fpar,fx,ierror,ipar,iwork,liw,lrw,nvar,rwork, &
-        slname,rwork(ltc),rwork(lwk),rwork(lxc),rwork(lxf),xr)
+        lb,ub,slname,rwork(ltc),rwork(lwk),rwork(lxc),rwork(lxf),xr)
 
       if ( ierror/= 0 ) then
         if ( iwrite>0 ) then
@@ -1367,7 +1369,7 @@ subroutine pitcon ( df, fpar, fx, ierror, ipar, iwork, liw, nvar, rwork, &
 !  proceed along the curve any more.
 !
   call trystp ( df, fpar, fx, ierror, ipar, iwork, liw, lrw, nvar, rwork, &
-    slname, rwork(ltc), rwork(lwk), rwork(lxf), xr )
+    lb, ub, slname, rwork(ltc), rwork(lwk), rwork(lxf), xr )
 
   if ( ierror /= 0 ) then
     if ( iwrite > 0 ) then
@@ -1758,7 +1760,7 @@ subroutine coqual ( modnew, qual, iwork, liw, rwork, lrw )
   return
 end
 subroutine corrector ( df, fpar, fx, ierror, ihold, ipar, iwork, nvar, rwork, &
-  wk, xr, lrw, liw, icrit, slname )
+  wk, xr, lrw, liw, icrit, lb, ub, slname )
 
 !*****************************************************************************80
 !
@@ -1843,6 +1845,7 @@ subroutine corrector ( df, fpar, fx, ierror, ihold, ipar, iwork, nvar, rwork, &
 !  4, a correction step was rejected (function norm increased or
 !     size of correction increased)
 !  5, too many correction steps were taken without convergence.
+!  6, appropriate damping coefficient not found
 !
 !  Modified:
 !
@@ -1891,6 +1894,14 @@ subroutine corrector ( df, fpar, fx, ierror, ihold, ipar, iwork, nvar, rwork, &
   double precision xnrm
   double precision xr(nvar)
   double precision xvalue
+
+! Damped Newton variables
+  double precision lb(nvar)
+  double precision ub(nvar)
+  double precision xrnew(nvar)
+  double precision damp_coeff
+  logical within_bounds
+
 !
 !  Initialize.
 !
@@ -1901,6 +1912,7 @@ subroutine corrector ( df, fpar, fx, ierror, ihold, ipar, iwork, nvar, rwork, &
   maxcor = iwork(17)
   ierror = 0
 
+! Number of Newton steps
   iwork(28) = 0
 
   if ( modnew == 0 ) then
@@ -1910,6 +1922,7 @@ subroutine corrector ( df, fpar, fx, ierror, ihold, ipar, iwork, nvar, rwork, &
   end if
 
   fmp = 2.0D+00
+! Size of last correction
   rwork(9) = 0.0D+00
   xvalue = xr(ihold)
 !
@@ -1962,6 +1975,34 @@ subroutine corrector ( df, fpar, fx, ierror, ihold, ipar, iwork, nvar, rwork, &
       end if
       return
     end if
+
+!  Compute damping coefficient 
+   damp_coeff = 1.0
+   within_bounds = .False.
+
+   do while (within_bounds .eqv. .False.)
+     xrnew(1:nvar) = xr(1:nvar) - damp_coeff*wk(1:nvar) 
+     if (damp_coeff < rwork(8)) then
+       if (iwrite>= 1) then
+         ierror = 6
+         write ( *, * ) 'CORRECTOR - Fatal error!'
+         write ( *, * ) 'Unable to find damping coefficient'
+       end if
+       return
+     end if
+
+     if (all(xrnew > lb) .and. all(xrnew < ub)) then
+       within_bounds = .True.
+     else
+       damp_coeff = damp_coeff/sqrt(2.0D+00)
+     end if
+   end do
+
+   if (iwrite >= 2) then
+     write( *, *) 'Found damping coefficient', damp_coeff
+   end if
+   wk(1:nvar) = damp_coeff*wk(1:nvar) 
+
 !
 !  Subtract WK from XR to get the next iterate.
 !
@@ -3869,7 +3910,7 @@ subroutine dge_trs ( trans, n, nrhs, a, lda, ipiv, b, ldb, info )
   return
 end
 subroutine limit ( df, fpar, fx, ierror, ipar, iwork, liw, lrw, nvar, rwork, &
-  slname, tc, wk, xc, xf, xr )
+  lb, ub, slname, tc, wk, xc, xf, xr )
 
 !*****************************************************************************80
 !
@@ -3945,6 +3986,8 @@ subroutine limit ( df, fpar, fx, ierror, ipar, iwork, liw, lrw, nvar, rwork, &
   double precision xdif
   double precision xf(nvar)
   double precision xr(nvar)
+  double precision lb(nvar)
+  double precision ub(nvar)
 
   iwrite = iwork(7)
   lim = iwork(6)
@@ -4118,7 +4161,7 @@ subroutine limit ( df, fpar, fx, ierror, ipar, iwork, liw, lrw, nvar, rwork, &
 
   icrit = 0
   call corrector ( df,fpar,fx,ierror,lpc,ipar,iwork,nvar,rwork,wk,xr, &
-    lrw,liw,icrit,slname)
+    lrw,liw,icrit,lb,ub,slname)
 !
 !  If the correction fails, see if we can retry.
 !
@@ -4653,7 +4696,7 @@ subroutine stajac(df,fpar,fx,ierror,ipar,ipc,iwork,liw,lrw,nvar,rwork,wk,xr, &
   return
 end
 subroutine start(df,fpar,fx,ierror,ipar,ipc,iwork,liw,lrw,nvar,rwork,wk, &
-  xc,xf,xr,slname)
+  xc,xf,xr,lb,ub,slname)
 
 !*****************************************************************************80
 !
@@ -4692,6 +4735,8 @@ subroutine start(df,fpar,fx,ierror,ipar,ipc,iwork,liw,lrw,nvar,rwork,wk, &
   double precision xc(nvar)
   double precision xf(nvar)
   double precision xr(nvar)
+  double precision lb(nvar)
+  double precision ub(nvar)
 
   iwrite = iwork(7)
 
@@ -4709,7 +4754,7 @@ subroutine start(df,fpar,fx,ierror,ipar,ipc,iwork,liw,lrw,nvar,rwork,wk, &
   xr(1:nvar) = xc(1:nvar)
 
   call corrector ( df,fpar,fx,ierror,ipc,ipar,iwork,nvar,rwork,wk,xr, &
-    lrw,liw,icrit,slname)
+    lrw,liw,icrit,lb,ub,slname)
 
   iwork(25) = iwork(25)+iwork(28)
 !
@@ -5127,7 +5172,7 @@ subroutine tanpar ( df, fpar, fx, ierror, ipar, iwork, liw, lrw, nvar, &
   return
 end
 subroutine target(df,fpar,fx,ierror,ifound,ipar,iwork,liw,lrw,nvar,rwork, &
-  slname,wk,xc,xf,xr)
+  lb,ub,slname,wk,xc,xf,xr)
 
 !*****************************************************************************80
 !
@@ -5180,6 +5225,8 @@ subroutine target(df,fpar,fx,ierror,ifound,ipar,iwork,liw,lrw,nvar,rwork, &
   double precision xc(nvar)
   double precision xf(nvar)
   double precision xr(nvar)
+  double precision lb(nvar)
+  double precision ub(nvar)
 
   it = iwork(5)
   if ( it < 1 .or. it > nvar ) then
@@ -5233,7 +5280,7 @@ subroutine target(df,fpar,fx,ierror,ifound,ipar,iwork,liw,lrw,nvar,rwork, &
   icrit = 0
 
   call corrector ( df,fpar,fx,ierror,it,ipar,iwork,nvar,rwork,wk,xr, &
-    lrw,liw,icrit,slname)
+    lrw,liw,icrit,lb,ub,slname)
 
   iwork(24) = iwork(24) + iwork(28)
 
@@ -5275,7 +5322,7 @@ subroutine target(df,fpar,fx,ierror,ifound,ipar,iwork,liw,lrw,nvar,rwork, &
   return
 end
 subroutine trystp ( df, fpar, fx, ierror, ipar, iwork, liw, lrw, nvar, &
-  rwork, slname, tc, wk, xf, xr )
+  rwork, lb, ub, slname, tc, wk, xf, xr )
 
 !*****************************************************************************80
 !
@@ -5321,6 +5368,8 @@ subroutine trystp ( df, fpar, fx, ierror, ipar, iwork, liw, lrw, nvar, &
   double precision wk(nvar)
   double precision xf(nvar)
   double precision xr(nvar)
+  double precision lb(nvar)
+  double precision ub(nvar)
 
   external df
   external fx
@@ -5356,7 +5405,7 @@ subroutine trystp ( df, fpar, fx, ierror, ipar, iwork, liw, lrw, nvar, &
   icrit = 0
 
   call corrector ( df, fpar, fx, ierror, ihold, ipar, iwork, nvar, rwork, &
-    wk, xr, lrw, liw, icrit, slname )
+    wk, xr, lrw, liw, icrit, lb, ub, slname )
 
   iwork(25) = iwork(25) + iwork(28)
 !
