@@ -1899,8 +1899,14 @@ subroutine corrector ( df, fpar, fx, ierror, ihold, ipar, iwork, nvar, rwork, &
   double precision lb(nvar)
   double precision ub(nvar)
   double precision xrnew(nvar)
+  double precision fnew(nvar)
   double precision damp_coeff
+  double precision best_damp_coeff
+  double precision init_damp_coeff
+  double precision best_fnrm
+  double precision fnrm_in
   logical within_bounds
+  logical find_local_minimum
 
 !
 !  Initialize.
@@ -1978,7 +1984,9 @@ subroutine corrector ( df, fpar, fx, ierror, ihold, ipar, iwork, nvar, rwork, &
 
 !  Compute damping coefficient 
    damp_coeff = 1.0
+   best_damp_coeff = 1.0
    within_bounds = .False.
+   find_local_minimum = .False.
 
    do while (within_bounds .eqv. .False.)
      xrnew(1:nvar) = xr(1:nvar) - damp_coeff*wk(1:nvar) 
@@ -1993,20 +2001,49 @@ subroutine corrector ( df, fpar, fx, ierror, ihold, ipar, iwork, nvar, rwork, &
 
      if (all(xrnew > lb) .and. all(xrnew < ub)) then
        within_bounds = .True.
+
+       init_damp_coeff = damp_coeff
+       if (find_local_minimum .eqv. .True.) then
+         ! Find minimum damping coefficient
+         best_fnrm = 0.0
+         if (iwrite >= 2) then
+           write(*,*) "Initial damping coefficient: ", init_damp_coeff
+         end if
+         do while (damp_coeff >= 0.125*init_damp_coeff)
+           xrnew(1:nvar) = xr(1:nvar) - damp_coeff*wk(1:nvar)
+           ! Evaluate function at new iterate
+           call fx ( nvar, fpar, ipar, xrnew, fnew )
+           iwork(22) = iwork(22)+1
+           fnew(nvar) = xr(ihold) - xvalue
+           fnrm_in = dnrm2 ( nvar, fnew, 1 )
+           if (iwrite >= 2) then 
+             write( *,* ) damp_coeff/init_damp_coeff, fnrm_in
+           end if
+           if (fnrm_in < best_fnrm .or. best_fnrm == 0.0) then
+             best_damp_coeff = damp_coeff
+             best_fnrm = fnrm_in
+           end if
+           damp_coeff = damp_coeff/2.0D+00
+         end do
+         if (iwrite >= 2) then
+           write(*,*) "Best: ", best_damp_coeff/init_damp_coeff
+         end if
+       end if
+
      else
        damp_coeff = damp_coeff/sqrt(2.0D+00)
+       find_local_minimum = .True.
      end if
    end do
 
    if (iwrite >= 2) then
-     write( *, *) 'Found damping coefficient', damp_coeff
+     write( *, *) 'Found damping coefficient', best_damp_coeff
    end if
-   wk(1:nvar) = damp_coeff*wk(1:nvar) 
 
 !
 !  Subtract WK from XR to get the next iterate.
 !
-    xr(1:nvar) = xr(1:nvar) - wk(1:nvar)
+    xr(1:nvar) = xr(1:nvar) - best_damp_coeff*wk(1:nvar)
 
     stepxl = rwork(9)
     ksmax = idamax ( nvar, wk, 1 )
