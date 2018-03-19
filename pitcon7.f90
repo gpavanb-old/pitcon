@@ -1948,7 +1948,7 @@ subroutine corrector ( df, fpar, fx, ierror, ihold, ipar, iwork, nvar, rwork, &
     write ( *, * ) 'Step      FX             X             DX'
     write ( *, * ) ' '
     write(*,'(1x,i4,2g14.6)')iwork(28),fnrm,xnrm
-    write(*,'(12x,i3,11x,i3)')ifmax,ixmax
+    write(*,'(12x,i4,11x,i4)')ifmax,ixmax
   end if
 
   if ( 2.0D+00 * fnrm <= abserr ) then
@@ -2063,9 +2063,9 @@ subroutine corrector ( df, fpar, fx, ierror, ihold, ipar, iwork, nvar, rwork, &
 
     if ( iwrite>= 2) then
       write(*,'(1x,4x,28x,g14.6)')rwork(9)
-      write(*,'(1x,4x,28x,7x,i3)')ksmax
+      write(*,'(1x,4x,28x,7x,i4)')ksmax
       write(*,'(1x,i4,2g14.6)')iwork(28),fnrm,xnrm
-      write(*,'(12x,i3,11x,i3)')ifmax,ixmax
+      write(*,'(12x,i4,11x,i4)')ifmax,ixmax
     end if
 !
 !  Check for strong acceptance of function and stepsize.
